@@ -1,46 +1,61 @@
 public with sharing class leadAssignmentHandler {
-
-    // public static void leadAssignmentWithRoundRobin(List<Lead> newLeads,String queueName){
-
+    
+    public static void leadAssignmentWithRoundRobin(List<Lead> newLeads, String queueName) {
+        List<String> userIds = new List<String>();
         
-    //     Group queue = [SELECT Id FROM Group WHERE Type = 'Queue' AND Name = :queueName LIMIT 1];
-    //     if (queue == null) {
-    //         return;
-    //     }
-
-    //     List<GroupMember> queueMembers = [
-    //         SELECT UserOrGroupId 
-    //         FROM GroupMember 
-    //         WHERE GroupId = :queue.Id
-    //     ];
-
-    //     if (queueMembers.isEmpty()) {
-    //         return;
-    //     }
-
         
-    //     List<Id> userIds = new List<Id>();
-    //     for (GroupMember member : queueMembers) {
-    //         userIds.add(member.UserOrGroupId);
-    //     }
-
+        Group queue = [SELECT Id FROM Group WHERE Type = 'Queue' AND Name = :queueName LIMIT 1];
+        if (queue == null) {
+            return;
+        }
         
-    //     RoundRobinCounter__c counter = [select id,QueueName__c,LastAssignedUserId__c from RoundRobinCounter__c where QueueName__c = :queueName].size() == 1 ?[select id,QueueName__c,LastAssignedUserId__c from RoundRobinCounter__c where QueueName__c = :queueName]:new RoundRobinCounter__c(QueueName__c =queueName,LastAssignedUserId__c=null);
-
         
-
-
+        List<GroupMember> queueMembers = [
+            SELECT UserOrGroupId 
+            FROM GroupMember 
+            WHERE GroupId = :queue.Id
+        ];
+        if (queueMembers.isEmpty()) {
+            return;
+        }
         
-    //     Integer lastIndex = userIds.indexOf(counter.LastAssignedUserId__c);
-    //     Integer nextIndex = (lastIndex + 1) % userIds.size();
-    //     Id nextUserId = userIds[nextIndex];
-
         
-    //     newLead.OwnerId = nextUserId;
-
+        for (GroupMember member : queueMembers) {
+            userIds.add(member.UserOrGroupId);
+        }
         
-    //     counter.LastAssignedUserId__c = nextUserId;
-    //     upsert counter;
-
-    // }
+        
+        RoundRobinCounter__c counter = [
+            SELECT Id, QueueName__c, LastAssignedUserId__c 
+            FROM RoundRobinCounter__c 
+            WHERE QueueName__c = :queueName
+            LIMIT 1
+        ];
+        if (counter == null) {
+            counter = new RoundRobinCounter__c(QueueName__c = queueName, LastAssignedUserId__c = null);
+        }
+        
+        Integer lastIndex = -1;
+        
+        
+        if (counter.LastAssignedUserId__c != null) {
+            lastIndex = userIds.indexOf(counter.LastAssignedUserId__c);
+        }
+        
+        
+        for (Lead newLead : newLeads) {
+            Integer nextIndex = (lastIndex + 1) >= userIds.size() ? 0 : lastIndex + 1; 
+            Id nextUserId = userIds[nextIndex]; 
+            
+            
+            newLead.OwnerId = nextUserId;
+            
+            lastIndex = nextIndex;
+        }
+        
+        
+        counter.LastAssignedUserId__c = userIds[lastIndex];
+        upsert counter;
+    }
+    
 }
